@@ -36,7 +36,7 @@ jobs:
       run:
         working-directory: terraform
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.16"
@@ -57,7 +57,7 @@ jobs:
       run:
         working-directory: terraform
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.16"
