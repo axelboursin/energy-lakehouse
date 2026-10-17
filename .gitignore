@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Databricks
+.databricks/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+backend.hcl

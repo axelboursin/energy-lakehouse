@@ -1,0 +1,68 @@
+name: Deploy bundle
+
+# main  -> deploy to staging and run the whole pipeline on real data (integration test)
+# release published -> deploy the same commit to prod, after manual approval
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["terraform/**", "**.md"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # GitHub OIDC token, exchanged for a Databricks OAuth token
+
+concurrency:
+  group: deploy-${{ github.event_name == 'release' && 'prod' || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  # Workload identity federation: no Databricks secret stored in GitHub.
+  DATABRICKS_AUTH_TYPE: github-oidc
+
+jobs:
+  staging:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - uses: databricks/setup-cli@v1.21.0
+      - name: Validate bundle
+        run: databricks bundle validate -t staging --var="service_principal_id=$DATABRICKS_CLIENT_ID"
+      - name: Deploy
+        run: databricks bundle deploy -t staging --var="service_principal_id=$DATABRICKS_CLIENT_ID"
+      - name: Run pipeline end-to-end (ingest -> gold -> quality gate)
+        run: databricks bundle run eco2mix_pipeline -t staging --var="service_principal_id=$DATABRICKS_CLIENT_ID"
+
+  prod:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: prod # required reviewers + tag-only deployment rule
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - uses: databricks/setup-cli@v1.21.0
+      - name: Validate bundle
+        run: databricks bundle validate -t prod --var="service_principal_id=$DATABRICKS_CLIENT_ID"
+      - name: Deploy
+        run: databricks bundle deploy -t prod --var="service_principal_id=$DATABRICKS_CLIENT_ID"
+      - name: Summary
+        run: |
+          {
+            echo "### Deployed ${{ github.event.release.tag_name }} to prod"
+            databricks bundle summary -t prod --var="service_principal_id=$DATABRICKS_CLIENT_ID"
+          } >> "$GITHUB_STEP_SUMMARY"

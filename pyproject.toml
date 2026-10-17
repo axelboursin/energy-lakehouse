@@ -1,0 +1,41 @@
+[project]
+name = "energy-lakehouse"
+version = "0.1.0"
+description = "Medallion lakehouse on Databricks for French electricity-mix open data, deployed with Asset Bundles"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+# pyspark and delta are provided by the Databricks runtime: not runtime dependencies.
+dependencies = []
+
+[project.scripts]
+lakehouse = "energy_lakehouse.cli:main"
+
+[dependency-groups]
+dev = [
+    "pyspark>=4.0,<5",
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/energy_lakehouse"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM", "PD"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+"tests/conftest.py" = ["E402"]  # env vars must be set before importing pyspark

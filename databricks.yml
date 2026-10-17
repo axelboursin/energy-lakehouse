@@ -1,0 +1,53 @@
+# Databricks Asset Bundle: one definition, three isolated environments.
+#   dev      per-developer deployment, resources prefixed and schedules paused
+#   staging  deployed and run end-to-end on every merge to main
+#   prod     deployed from a release, runs as a service principal
+bundle:
+  name: energy-lakehouse
+
+include:
+  - resources/*.yml
+
+artifacts:
+  lakehouse_wheel:
+    type: whl
+    build: uv build --wheel
+    path: .
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze, silver and gold schemas
+  alert_email:
+    description: Address notified when the pipeline fails
+    default: data-alerts@example.com
+  service_principal_id:
+    description: Application ID of the deployment service principal (staging and prod)
+    default: ""
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      catalog: energy_dev
+
+  staging:
+    mode: production
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: energy_staging
+    run_as:
+      service_principal_name: ${var.service_principal_id}
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: energy_prod
+    run_as:
+      service_principal_name: ${var.service_principal_id}
+    permissions:
+      - group_name: data-engineers
+        level: CAN_VIEW

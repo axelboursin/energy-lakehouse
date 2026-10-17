@@ -1,0 +1,66 @@
+name: Unity Catalog (Terraform)
+
+on:
+  pull_request:
+    paths: ["terraform/**"]
+  push:
+    branches: [main]
+    paths: ["terraform/**"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-unity-catalog
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+  TF_WORKSPACE: energy-lakehouse-unity-catalog
+  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+  DATABRICKS_AUTH_TYPE: github-oidc
+  TF_VAR_deployer_application_id: ${{ vars.DEPLOYER_APPLICATION_ID }}
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: platform-plan
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.16"
+          terraform_wrapper: false
+      - run: terraform init
+      - run: terraform plan -no-color -out=tfplan
+      - run: |
+          { echo '### Unity Catalog plan'; echo '```'; terraform show -no-color tfplan | tail -c 60000; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: platform # required reviewers
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.16"
+          terraform_wrapper: false
+      - run: terraform init
+      - run: terraform apply -auto-approve

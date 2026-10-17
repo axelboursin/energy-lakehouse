@@ -1,0 +1,76 @@
+resources:
+  jobs:
+    eco2mix_pipeline:
+      name: eco2mix-medallion-pipeline
+      description: Land eCO2mix open data, then refresh bronze, silver and gold tables.
+      tags:
+        domain: energy
+        layer: medallion
+
+      # Every 30 minutes, matching the publication rate of the real-time dataset.
+      # Development mode pauses this schedule automatically.
+      schedule:
+        quartz_cron_expression: "0 5/30 * * * ?"
+        timezone_id: Europe/Paris
+
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 1200
+
+      # Serverless compute: nothing to size or patch, billed per second.
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+            dependencies:
+              - ../dist/*.whl
+
+      tasks:
+        - task_key: ingest
+          environment_key: default
+          max_retries: 2
+          min_retry_interval_millis: 60000
+          python_wheel_task:
+            package_name: energy_lakehouse
+            entry_point: lakehouse
+            parameters: ["ingest", "--catalog", "${var.catalog}", "--lookback-days", "2"]
+
+        - task_key: bronze
+          depends_on: [{ task_key: ingest }]
+          environment_key: default
+          python_wheel_task:
+            package_name: energy_lakehouse
+            entry_point: lakehouse
+            parameters: ["bronze", "--catalog", "${var.catalog}"]
+
+        - task_key: silver
+          depends_on: [{ task_key: bronze }]
+          environment_key: default
+          python_wheel_task:
+            package_name: energy_lakehouse
+            entry_point: lakehouse
+            parameters: ["silver", "--catalog", "${var.catalog}"]
+
+        - task_key: gold
+          depends_on: [{ task_key: silver }]
+          environment_key: default
+          python_wheel_task:
+            package_name: energy_lakehouse
+            entry_point: lakehouse
+            parameters: ["gold", "--catalog", "${var.catalog}"]
+
+        - task_key: quality_gate
+          depends_on: [{ task_key: gold }]
+          environment_key: default
+          python_wheel_task:
+            package_name: energy_lakehouse
+            entry_point: lakehouse
+            parameters: ["quality", "--catalog", "${var.catalog}"]
